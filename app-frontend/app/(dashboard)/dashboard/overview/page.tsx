@@ -1,66 +1,97 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import api from "@/lib/api";
 import { useOnboardingStore } from "@/app/stores/onboardingStore";
-import { generateInsights } from "@/lib/insights";
 
+type AnalysisResult = {
+  budget?: { savings?: number };
+  insights?: string[];
+  investments?: unknown;
+};
 
 export default function OverviewPage() {
   const {
     income,
     fixedExpenses,
     variableExpenses,
-    goal,
     risk,
   } = useOnboardingStore();
-  const insights = generateInsights(
-  income,
-  fixedExpenses,
-  variableExpenses
-);
 
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const savings =
-    income - fixedExpenses - variableExpenses;
+  useEffect(() => {
+    async function fetchAnalysis() {
+      try {
+        setLoading(true);
+
+        const res = await api.post("/analyze", {
+          income,
+          fixedExpenses,
+          variableExpenses,
+          risk,
+        });
+
+        setResult(res.data);
+      } catch (err) {
+        console.error(err);
+        setError("Failed to fetch analysis");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchAnalysis();
+  }, [income, fixedExpenses, variableExpenses, risk]);
+
+  if (loading) return <p>Loading analysis...</p>;
+  if (error) return <p className="text-red-500">{error}</p>;
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Overview</h1>
+      <h1 className="text-2xl font-bold">Financial Overview</h1>
 
+      {/* Basic numbers */}
       <div className="grid grid-cols-3 gap-4">
-        <Stat title="Income" value={`₹${income}`} />
-        <Stat
+        <Card title="Income" value={`₹${income}`} />
+        <Card
           title="Expenses"
           value={`₹${fixedExpenses + variableExpenses}`}
         />
-        <Stat title="Savings" value={`₹${savings}`} />
+        <Card
+          title="Savings"
+          value={`₹${result?.budget?.savings ?? 0}`}
+        />
       </div>
 
-      <div className="bg-white p-4 rounded shadow">
-        <p className="text-sm text-gray-500">Goal</p>
-        <p className="font-semibold">{goal}</p>
-        <p className="text-sm mt-1">Risk: {risk}</p>
-      </div>
-      <div className="bg-white p-4 rounded shadow">
-  <h3 className="font-semibold mb-2">Insights</h3>
-  <ul className="list-disc ml-5 text-sm space-y-1">
-    {insights.map((i, idx) => (
-      <li key={idx}>{i}</li>
-    ))}
-  </ul>
-</div>
+      {/* Insights */}
+      {result?.insights && (
+        <div className="bg-white p-4 rounded shadow">
+          <h3 className="font-semibold mb-2">Insights</h3>
+          <ul className="list-disc ml-5 text-sm space-y-1">
+            {result.insights.map((i: string, idx: number) => (
+              <li key={idx}>{i}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
+      {/* Investment suggestion */}
+      {Boolean(result?.investments) && (
+        <div className="bg-white p-4 rounded shadow">
+          <h3 className="font-semibold mb-2">Investment Suggestion</h3>
+          <pre className="text-sm">
+            {JSON.stringify(result?.investments, null, 2)}
+          </pre>
+        </div>
+      )}
     </div>
-    
   );
 }
 
-function Stat({
-  title,
-  value,
-}: {
-  title: string;
-  value: string;
-}) {
+function Card({ title, value }: { title: string; value: string }) {
   return (
     <div className="bg-white p-4 rounded shadow">
       <p className="text-sm text-gray-500">{title}</p>
